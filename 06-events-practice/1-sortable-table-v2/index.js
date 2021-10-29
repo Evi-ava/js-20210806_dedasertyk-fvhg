@@ -1,33 +1,29 @@
 export default class SortableTable {
-  element;
+
+  element = null;
   subElements = {};
 
-  onSortClick = event => {
-    const column = event.target.closest('[data-sortable="true"]');
+  onSortedClick = event => {
+    const element = event.target.closest('[data-sortable="true"]');
+
     const toggleOrder = order => {
       const orders = {
-        asc: 'desc',
-        desc: 'asc'
-      };
-
-      return orders[order];
-    };
-
-    if (column) {
-      const { id, order } = column.dataset;
-      const newOrder = toggleOrder(order);
-      const sortedData = this.sortData(id, newOrder);
-      const arrow = column.querySelector('.sortable-table__sort-arrow');
-
-      column.dataset.order = newOrder;
-
-      if (!arrow) {
-        column.append(this.subElements.arrow);
+        'asc': 'desc',
+        'desc': 'asc'
       }
 
-      this.subElements.body.innerHTML = this.getTableRows(sortedData);
+      return orders[order];
     }
-  };
+
+    if(element) {
+      const {arrow} = this.subElements;
+      const {id, order} = element.dataset;
+
+      this.update(id, toggleOrder(order));
+      element.dataset.order = toggleOrder(order);
+      element.append(arrow);
+    }
+  }
 
   constructor(headerConfig = [], {
     data = [],
@@ -41,90 +37,105 @@ export default class SortableTable {
     this.sorted = sorted;
 
     this.render();
+    this.subElements = this.getSubElements();
+    this.initialize();
   }
 
-  getTableHeader() {
-    return `<div data-element="header" class="sortable-table__header sortable-table__row">
-      ${this.headerConfig.map(item => this.getHeaderRow(item)).join('')}
-    </div>`;
-  }
+  getSubElements() {
+    const result = {};
 
-  getHeaderRow ({id, title, sortable}) {
-    const order = this.sorted.id === id ? this.sorted.order : 'asc';
+    const elements = [...this.element.querySelectorAll('[data-element]')];
 
-    return `
-      <div class="sortable-table__cell" data-id="${id}" data-sortable="${sortable}" data-order="${order}">
-        <span>${title}</span>
-        ${this.getHeaderSortingArrow(id)}
-      </div>
-    `;
-  }
+    for(const elem of elements) {
+      result[elem.dataset.element] = elem;
+    }
 
-  getHeaderSortingArrow (id) {
-    const isOrderExist = this.sorted.id === id ? this.sorted.order : '';
-
-    return isOrderExist
-      ? `<span data-element="arrow" class="sortable-table__sort-arrow">
-          <span class="sort-arrow"></span>
-        </span>`
-      : '';
-  }
-
-  getTableBody(data) {
-    return `
-      <div data-element="body" class="sortable-table__body">
-        ${this.getTableRows(data)}
-      </div>`;
-  }
-
-  getTableRows (data) {
-    return data.map(item => `
-      <div class="sortable-table__row">
-        ${this.getTableRow(item)}
-      </div>`
-    ).join('');
-  }
-
-  getTableRow (item) {
-    const cells = this.headerConfig.map(({id, template}) => {
-      return {
-        id,
-        template
-      };
-    });
-
-    return cells.map(({id, template}) => {
-      return template
-        ? template(item[id])
-        : `<div class="sortable-table__cell">${item[id]}</div>`;
-    }).join('');
-  }
-
-  getTable(data) {
-    return `
-      <div class="sortable-table">
-        ${this.getTableHeader()}
-        ${this.getTableBody(data)}
-      </div>`;
+    return result;
   }
 
   render() {
-    const {id, order} = this.sorted;
     const wrapper = document.createElement('div');
+
+    const {id, order} = this.sorted;
     const sortedData = this.sortData(id, order);
 
-    wrapper.innerHTML = this.getTable(sortedData);
+    wrapper.innerHTML = this.getTemplate(sortedData);
 
-    const element = wrapper.firstElementChild;
-
-    this.element = element;
-    this.subElements = this.getSubElements(element);
-
-    this.initEventListeners();
+    this.element = wrapper.firstElementChild;
   }
 
-  initEventListeners() {
-    this.subElements.header.addEventListener('pointerdown', this.onSortClick);
+  getTemplate(data) {
+    return `<div class="sortable-table">
+          ${this.getHeader()}
+          ${this.getTable(data)}
+    </div>`;
+  }
+
+  getHeader() {
+    return `<div data-element="header" class="sortable-table__header sortable-table__row">
+          ${this.getHeaderRow()}
+    </div>`;
+  }
+
+  getHeaderRow() {
+
+    const {id, order} = this.sorted;
+
+    return this.headerConfig.map(column => {
+          return `
+          <div class="sortable-table__cell" data-id="${column.id}" data-sortable="${column.sortable}" data-order="${id === column.id ? order : 'asc'}">
+            <span>${column.title}</span>
+
+            ${this.addArrow(id, column.id)}
+          </div>
+          `;
+
+    }).join('');
+
+  }
+
+  addArrow(id, columnId) {
+    const template = `
+    <span data-element="arrow" class="sortable-table__sort-arrow">
+      <span class="sort-arrow"></span>
+    </span>`
+
+    return id === columnId ? template : '';
+  }
+
+  getTable(data = []) {
+    return `<div data-element="body" class="sortable-table__body">
+      ${this.getRows(data)}
+    <div>`;
+  }
+
+  getRows(data = []) {
+
+    const columns = this.headerConfig.map(column => {
+      return {
+        id: column.id,
+        template: column.template,
+      }
+    });
+
+    return data.map(row => {
+      return `<a href="/products/3d-ochki-epson-elpgs03" class="sortable-table__row">${this.getCells(row, columns)}</a>`
+    }).join('');
+  } 
+
+  getCells(row, columns) {
+    
+    return columns.map(({id, template}) => {
+      return template ? template(row.images) : `<div class="sortable-table__cell">${row[id]}</div>`;
+    }).join('');
+  }
+
+  update(id, order) {
+    const {body} = this.subElements;
+
+    const newData = this.sortData(id, order);
+
+    body.innerHTML = this.getRows(newData);
   }
 
   sortData(id, order) {
@@ -147,25 +158,17 @@ export default class SortableTable {
     });
   }
 
-  getSubElements(element) {
-    const result = {};
-    const elements = element.querySelectorAll('[data-element]');
-
-    for (const subElement of elements) {
-      const name = subElement.dataset.element;
-
-      result[name] = subElement;
-    }
-
-    return result;
-  }
-
-  remove() {
-    this.element.remove();
+  initialize() {
+    this.element.addEventListener('pointerdown', this.onSortedClick);
   }
 
   destroy() {
     this.remove();
-    this.subElements = {};
+  }
+
+  remove() {
+    if(this.element) {
+      this.element.remove();
+    }
   }
 }
